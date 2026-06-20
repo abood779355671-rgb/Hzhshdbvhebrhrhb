@@ -104,6 +104,10 @@ class Config:
         # ============ YOUTUBE COOKIES ============
         # Parse space-separated cookie URLs for age-restricted content
         self.COOKIES_URL: List[str] = self._parse_cookies()
+        # How often (in hours) to automatically re-download cookies in the
+        # background, since YouTube cookies expire periodically and the bot
+        # would otherwise keep failing until manually redeployed.
+        self.COOKIE_REFRESH_HOURS: float = float(getenv("COOKIE_REFRESH_HOURS", "6"))
 
         # ============ IMAGE URLS ============
         # URLs for various bot images
