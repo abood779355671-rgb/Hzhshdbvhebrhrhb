@@ -17,6 +17,7 @@ import yt_dlp
 import random
 import asyncio
 import aiohttp
+import hashlib
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional, Union
@@ -95,14 +96,26 @@ class YouTube:
         return f"UltraMusic/cookies/{random.choice(self.cookies)}"
 
     async def save_cookies(self, urls: list[str]) -> None:
+        """
+        Download cookie files from the configured URLs.
+
+        Uses a DETERMINISTIC filename per URL (hash of the URL) instead of a
+        random one. This means refreshing the same COOKIE_URL later overwrites
+        the same file on disk rather than piling up a new randomly-named file
+        every time — which previously left old/expired cookie files on disk
+        forever, still eligible to be picked by get_cookies()'s random.choice().
+        """
         logger.info("🍪 Saving cookies from urls...")
         saved_count = 0
+        fresh_filenames = []
         for url in urls:
             try:
-                path = f"UltraMusic/cookies/cookie{random.randint(10000, 99999)}.txt"
+                url_hash = hashlib.md5(url.encode()).hexdigest()[:10]
+                path = f"UltraMusic/cookies/cookie_{url_hash}.txt"
                 link = url.replace("me/", "me/raw/")
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(link) as resp:
+                    timeout = aiohttp.ClientTimeout(total=20)
+                    async with session.get(link, timeout=timeout) as resp:
                         if resp.status != 200:
                             logger.error(f"❌ Cookie download failed: HTTP {resp.status} from {url}")
                             continue
@@ -114,21 +127,46 @@ class YouTube:
                             fw.write(content)
                         if os.path.exists(path) and os.path.getsize(path) > 0:
                             saved_count += 1
-                            # Add the new cookie file to the list immediately
-                            cookie_filename = os.path.basename(path)
-                            if cookie_filename not in self.cookies:
-                                self.cookies.append(cookie_filename)
-                            logger.info(f"✅ Saved: {cookie_filename} ({len(content)} bytes)")
+                            fresh_filenames.append(os.path.basename(path))
+                            logger.info(f"✅ Saved: {os.path.basename(path)} ({len(content)} bytes)")
             except Exception as e:
                 logger.error(f"❌ Cookie download error from {url}: {e}")
-        
-        # Force refresh of cookie list after download
-        self.checked = True
-        
+
         if saved_count > 0:
-            logger.info(f"✅ Cookies saved. ({saved_count} file(s))")
+            # Replace the active cookie list with exactly what was just
+            # confirmed working. Any old/expired file that's no longer
+            # returned this round stops being selectable immediately.
+            self.cookies = fresh_filenames
+            self.checked = True
+            logger.info(f"✅ Cookies refreshed. ({saved_count} file(s) active)")
+        elif self.cookies:
+            logger.warning(
+                "⚠️ Cookie refresh attempt failed (network/source issue) — "
+                "keeping the previous working cookies as fallback."
+            )
         else:
+            self.checked = True
             logger.error("❌ No cookies saved! Check COOKIE_URL in .env. YouTube downloads will fail!")
+
+    async def start_cookie_auto_refresh(self, urls: list[str], interval_hours: float = 6) -> None:
+        """
+        Background loop that re-downloads YouTube cookies on a fixed interval.
+
+        Cookies were previously only fetched once at startup, so once they
+        expired (YouTube cookies commonly go stale every few days) the bot
+        kept failing until someone manually redeployed. This keeps them
+        fresh automatically without restarting the bot.
+        """
+        if not urls:
+            return
+        interval_seconds = max(interval_hours, 0.5) * 3600
+        while True:
+            await asyncio.sleep(interval_seconds)
+            logger.info("🔄 Auto-refreshing YouTube cookies...")
+            try:
+                await self.save_cookies(urls)
+            except Exception as e:
+                logger.error(f"❌ Scheduled cookie refresh failed: {e}")
 
     def valid(self, url: str) -> bool:
         return bool(re.match(self.regex, url))
