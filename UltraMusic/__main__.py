@@ -66,6 +66,14 @@ async def main():
             except Exception as e:
                 logger.error(f"Failed to download cookies: {e}")
 
+            # Keep cookies fresh automatically in the background instead of
+            # only fetching them once at startup. Without this, expired
+            # cookies silently break /play until someone manually redeploys.
+            asyncio.create_task(
+                yt.start_cookie_auto_refresh(config.COOKIES_URL, config.COOKIE_REFRESH_HOURS)
+            )
+            logger.info(f"🔄 Cookie auto-refresh scheduled every {config.COOKIE_REFRESH_HOURS}h.")
+
         # Step 7: Load sudo users and blacklisted users from database
         sudoers = await db.get_sudoers()
         app.sudoers.update(sudoers)  # Add sudo users to set
