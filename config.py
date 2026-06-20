@@ -109,6 +109,12 @@ class Config:
         # would otherwise keep failing until manually redeployed.
         self.COOKIE_REFRESH_HOURS: float = float(getenv("COOKIE_REFRESH_HOURS", "6"))
 
+        # ============ PO TOKEN PROVIDER (bgutil-ytdlp-pot-provider) ============
+        # Base URL of the separately-running bgutil-ytdlp-pot-provider HTTP
+        # server (e.g. "http://1.2.3.4:4416" on your Lightsail VPS, or a
+        # Render service URL). Leave empty to disable PO token usage.
+        self.POT_PROVIDER_URL: str = getenv("POT_PROVIDER_URL", "").strip()
+
         # ============ IMAGE URLS ============
         # URLs for various bot images
         self.DEFAULT_THUMB: str = getenv(
