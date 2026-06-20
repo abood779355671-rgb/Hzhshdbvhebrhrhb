@@ -168,87 +168,6 @@ class YouTube:
             except Exception as e:
                 logger.error(f"❌ Scheduled cookie refresh failed: {e}")
 
-    # Public Piped API instances, tried in order. Piped resolves direct
-    # YouTube CDN stream URLs server-side without needing cookies at all,
-    # so it works as a last-resort fallback when yt-dlp gets blocked by
-    # YouTube's bot-check (common on cloud/datacenter IPs like Railway).
-    # Instances occasionally go down — if you notice all of them failing,
-    # check https://github.com/TeamPiped/documentation for a fresh list.
-    PIPED_INSTANCES = [
-        "https://pipedapi.kavin.rocks",
-        "https://pipedapi-libre.kavin.rocks",
-        "https://api.piped.yt",
-        "https://piped-api.privacy.com.de",
-        "https://pipedapi.adminforge.de",
-    ]
-
-    async def _download_via_piped(self, video_id: str, video: bool = False) -> Optional[str]:
-        """
-        Last-resort fallback downloader using public Piped instances.
-
-        Used only after BOTH yt-dlp attempts (with and without cookies) have
-        failed — typically because YouTube's bot-check rejected the request
-        outright regardless of cookies. Piped runs its own backend that talks
-        to YouTube and hands back a direct media URL, so no cookies or local
-        YouTube auth are needed for this path at all.
-        """
-        for instance in self.PIPED_INSTANCES:
-            stream_url = None
-            mime_type = ""
-            try:
-                api_url = f"{instance}/streams/{video_id}"
-                timeout = aiohttp.ClientTimeout(total=10)
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(api_url, timeout=timeout) as resp:
-                        if resp.status != 200:
-                            logger.warning(f"⚠️ Piped {instance} returned HTTP {resp.status}")
-                            continue
-                        data = await resp.json(content_type=None)
-            except Exception as ex:
-                logger.warning(f"⚠️ Piped instance {instance} unreachable: {ex}")
-                continue
-
-            streams = data.get("videoStreams" if video else "audioStreams") or []
-            if not streams:
-                logger.warning(f"⚠️ Piped {instance} returned no streams for {video_id}")
-                continue
-
-            best = max(streams, key=lambda s: s.get("bitrate", 0) or 0, default=None)
-            if not best or not best.get("url"):
-                continue
-            stream_url = best["url"]
-            mime_type = best.get("mimeType", "")
-
-            ext = "mp4" if video else ("m4a" if "mp4" in mime_type else "webm")
-            dest_path = f"downloads/{video_id}.{ext}"
-
-            try:
-                dl_timeout = aiohttp.ClientTimeout(total=60)
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(stream_url, timeout=dl_timeout) as media_resp:
-                        if media_resp.status != 200:
-                            logger.warning(
-                                f"⚠️ Piped media fetch failed (HTTP {media_resp.status}) via {instance}"
-                            )
-                            continue
-                        with open(dest_path, "wb") as fw:
-                            async for chunk in media_resp.content.iter_chunked(1 << 16):
-                                fw.write(chunk)
-                if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
-                    logger.info(f"✅ Downloaded {video_id} via Piped fallback ({instance})")
-                    return dest_path
-            except Exception as ex:
-                logger.warning(f"⚠️ Piped download via {instance} failed: {ex}")
-                if os.path.exists(dest_path):
-                    try:
-                        os.remove(dest_path)
-                    except Exception:
-                        pass
-                continue
-
-        logger.error(f"❌ All Piped instances failed for {video_id}")
-        return None
-
     def valid(self, url: str) -> bool:
         return bool(re.match(self.regex, url))
 
@@ -555,6 +474,16 @@ class YouTube:
                 "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
             }
 
+            # If a bgutil-ytdlp-pot-provider server is configured, attach its
+            # base_url so yt-dlp can fetch PO tokens from it. This mainly
+            # helps the "web" client (and anywhere YouTube throws
+            # "Sign in to confirm you're not a bot") on datacenter IPs like
+            # Render/Lightsail, on top of the existing android-client fallback.
+            if getattr(config, "POT_PROVIDER_URL", ""):
+                base_opts["extractor_args"]["youtubepot-bgutilhttp"] = {
+                    "base_url": [config.POT_PROVIDER_URL]
+                }
+
             if video:
                 # Video mode: download best video/audio combo up to configured height
                 height_filter = ""
@@ -646,23 +575,12 @@ class YouTube:
                         except Exception:
                             pass
 
-            # First attempt: public Piped instances. Tried first because it
-            # needs no cookies at all and isn't subject to YouTube's
-            # account/cookie-based bot-check the same way yt-dlp is — so it's
-            # generally the fastest, most consistent path on cloud IPs.
-            result = await self._download_via_piped(video_id, video=video)
-            if result:
-                return result
-
-            # Second attempt: yt-dlp with cookies (fallback if Piped's public
-            # instances are all down or don't have this particular video).
-            logger.warning(f"⚠️ Piped failed for {video_id}, trying yt-dlp with cookies...")
+            # First attempt: with cookies
             result = await asyncio.to_thread(_download, ydl_opts_cookie)
             if result:
                 return result
 
-            # Third attempt: yt-dlp without cookies (many public videos work
-            # without them; last resort before giving up).
+            # Second attempt: without cookies (many public videos work without them)
             logger.warning(f"⚠️ Download with cookies failed for {video_id}, retrying without cookies...")
             ydl_opts_no_cookie = {**ydl_opts}  # same opts but no cookiefile key
             ydl_opts_no_cookie.pop("cookiefile", None)
