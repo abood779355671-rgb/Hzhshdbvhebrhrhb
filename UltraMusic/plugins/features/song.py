@@ -14,12 +14,15 @@
 # Notes:
 # - يعيد استخدام yt.url() / yt.valid() / yt.search() / yt.download() الموجودة
 #   فعلياً في core/youtube.py (نفس المنطق المستخدم في /تشغيل بالضبط).
-# - الملف يُحمَّل بصيغة m4a/opus (بدون تحويل إلى mp3) لتفادي خطوة ffmpeg
-#   إضافية وإبطاء العملية - تيليجرام يدعم هذه الصيغ كملفات صوتية عادية.
-# - يحترم نفس كاش التحميل في downloads/ المستخدم من قبل /تشغيل.
+# - يتم تحويل الملف دائماً إلى MP3 حقيقي عبر ffmpeg (راجع _ensure_mp3) بدل
+#   إرسال صيغة التحميل الخام مباشرة - هذا يضمن ظهوره كملف صوتي صحيح في
+#   تيليجرام حتى لو كان الكاش المخزّن أصلاً mp4 (من تشغيل فيديو سابق).
+# - يحترم نفس كاش التحميل في downloads/ المستخدم من قبل /تشغيل، ويضيف نسخة
+#   mp3 مخزّنة بشكل منفصل لإعادة استخدامها لاحقاً بسرعة.
 # ==============================================================================
 
 import os
+import asyncio
 import logging
 
 from pyrogram import filters, enums
@@ -30,6 +33,46 @@ from UltraMusic import app, config, lang, yt
 from UltraMusic.helpers import command, thumb
 
 logger = logging.getLogger(__name__)
+
+
+async def _ensure_mp3(src_path: str, video_id: str) -> str | None:
+    """
+    Convert/ensure the file sent by /بحث is always a proper standalone MP3.
+
+    yt.download() may return a cached .m4a/.opus file, OR (if this video was
+    previously played with /فيديو in this chat) a cached .mp4 left over from
+    video playback. Telegram detects the .mp4 container as video, so even
+    though we send it via reply_audio() it shows up as a generic file/video
+    attachment instead of a clean audio player bubble.
+
+    Re-encoding to .mp3 here guarantees a correct audio/mpeg file every time,
+    regardless of what container was on disk. ffmpeg is already a dependency
+    of this project (used by core/youtube.py for video downloads), so no new
+    dependency is introduced. The result is cached as downloads/{id}.mp3, so
+    repeated /بحث (or /تشغيل) calls for the same track reuse it instantly.
+    """
+    mp3_path = f"downloads/{video_id}.mp3"
+    if os.path.isfile(mp3_path):
+        return mp3_path
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y", "-i", src_path,
+            "-vn", "-acodec", "libmp3lame", "-b:a", "128k",
+            mp3_path,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()
+    except Exception as e:
+        logger.error(f"❌ ffmpeg mp3 conversion failed for {video_id}: {e}", exc_info=True)
+        return None
+
+    if proc.returncode == 0 and os.path.isfile(mp3_path):
+        return mp3_path
+
+    logger.error(f"❌ ffmpeg exited {proc.returncode} converting {video_id} to mp3")
+    return None
 
 
 def _prepare_thumb(path: str) -> str | None:
@@ -102,6 +145,12 @@ async def search_song(_, m: Message):
 
     if not file_path or not os.path.isfile(file_path):
         return await status.edit_text(m.lang["song_download_failed"])
+
+    # ── Guarantee a real MP3 file regardless of the cached source format ──
+    mp3_path = await _ensure_mp3(file_path, track.id)
+    if not mp3_path:
+        return await status.edit_text(m.lang["song_download_failed"])
+    file_path = mp3_path
 
     # ── Thumbnail (best effort - send without one if it fails) ──
     thumb_path = None
