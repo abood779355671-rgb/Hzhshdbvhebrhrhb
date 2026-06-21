@@ -210,15 +210,6 @@ class Inline:
             ],
             [self.ikb(text="📩 تواصل مع المطور", url=self._developer_url())],
         ]
-        if private:
-            rows += [
-                [
-                    self.ikb(
-                        text=lang["source"],
-                        url="https://ultramusic.hasindunagolla.live/",
-                    )
-                ]
-            ]
         return self.ikm(rows)
 
     def yt_key(self, link: str) -> types.InlineKeyboardMarkup:
