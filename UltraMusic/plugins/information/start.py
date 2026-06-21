@@ -8,6 +8,8 @@
 # - New member detection (when bot joins a group)
 # ==============================================================================
 
+import asyncio
+
 from pyrogram import enums, errors, filters, types
 
 from UltraMusic import app, config, db, lang
@@ -84,6 +86,15 @@ async def start(_, message: types.Message):
     )
 
     key = buttons.start_key(message.lang, private)
+
+    # Show a brief ⚡️ loading effect before revealing the actual start message
+    loading_msg = await message.reply_text("⚡️", quote=not private)
+    await asyncio.sleep(0.7)
+    try:
+        await loading_msg.delete()
+    except Exception:
+        pass
+
     try:
         await message.reply_photo(
             photo=config.START_IMG,
