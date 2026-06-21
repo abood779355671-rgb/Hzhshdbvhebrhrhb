@@ -22,7 +22,7 @@
 import os
 import logging
 
-from pyrogram import filters
+from pyrogram import filters, enums
 from pyrogram.types import Message
 from PIL import Image
 
@@ -124,7 +124,7 @@ async def search_song(_, m: Message):
 
     # ── Send the audio file directly in the chat ──
     async def _send(with_thumb: bool):
-        await app.send_chat_action(chat_id=m.chat.id, action="upload_audio")
+        await app.send_chat_action(chat_id=m.chat.id, action=enums.ChatAction.UPLOAD_AUDIO)
         await m.reply_audio(
             file_path,
             title=track.title,
