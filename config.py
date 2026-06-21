@@ -123,7 +123,7 @@ class Config:
         # URLs for various bot images
         self.DEFAULT_THUMB: str = getenv(
             "DEFAULT_THUMB",
-            "https://files.catbox.moe/kgrs8f.png"  # Default thumbnail
+            "https://i.postimg.cc/Vsxjn68j/IMG-20260621-230357-390.jpg"  # Default thumbnail
         )
         self.PING_IMG: str = getenv(
             "PING_IMG", "https://files.catbox.moe/djilyq.png")    # Ping command image
