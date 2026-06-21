@@ -126,7 +126,7 @@ class Config:
             "https://i.postimg.cc/Vsxjn68j/IMG-20260621-230357-390.jpg"  # Default thumbnail
         )
         self.PING_IMG: str = getenv(
-            "PING_IMG", "https://files.catbox.moe/djilyq.png")    # Ping command image
+            "PING_IMG", "https://i.postimg.cc/Vsxjn68j/IMG-20260621-230357-390.jpg")    # Ping command image
         self.START_IMG: str = getenv(
             "START_IMG", "https://i.postimg.cc/FsmSWSkn/IMG-20260621-215549-468.jpg")  # Start command image
         self.RADIO_IMG: str = getenv(
