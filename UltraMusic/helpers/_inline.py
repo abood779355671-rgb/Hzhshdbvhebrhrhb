@@ -54,19 +54,6 @@ class Inline:
             )
 
         if not remove:
-            # Seek buttons row
-            keyboard.append(
-                [
-                    self.ikb(
-                        text="« 30", callback_data=f"controls seek_back_30 {chat_id}"),
-                    self.ikb(
-                        text="« 10", callback_data=f"controls seek_back_10 {chat_id}"),
-                    self.ikb(
-                        text="10 »", callback_data=f"controls seek_forward_10 {chat_id}"),
-                    self.ikb(
-                        text="30 »", callback_data=f"controls seek_forward_30 {chat_id}"),
-                ]
-            )
             # Main control buttons row
             keyboard.append(
                 [
