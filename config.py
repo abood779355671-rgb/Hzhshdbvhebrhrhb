@@ -69,6 +69,10 @@ class Config:
         self.QUEUE_LIMIT: int = int(getenv("QUEUE_LIMIT", "30"))
         # Max songs from playlist (default: 20)
         self.PLAYLIST_LIMIT: int = int(getenv("PLAYLIST_LIMIT", "20"))
+        # Max duration (in seconds) for the /بحث download-and-send command.
+        # Separate from DURATION_LIMIT because this limit applies to a full
+        # file download+upload, not voice-chat streaming. Default: 20 minutes.
+        self.SONG_DOWNLOAD_LIMIT: int = int(getenv("SONG_DOWNLOAD_LIMIT", "20")) * 60
 
         # ============ ASSISTANT/USERBOT SESSIONS ============
         # Pyrogram session strings - get from @StringFatherBot
