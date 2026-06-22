@@ -106,8 +106,7 @@ class Config:
         self.VIDEO_MAX_HEIGHT: int = self._parse_video_height()
 
         # ============ YOUTUBE COOKIES ============
-        # Parse space-separated cookie URLs for age-restricted content
-        self.COOKIES_URL: List[str] = self._parse_cookies()
+        # Parse space-separated cookie URLs for age-restricted contentself.COOKIES_URL: List[str] = self._parse_cookies()
         # How often (in hours) to automatically re-download cookies in the
         # background, since YouTube cookies expire periodically and the bot
         # would otherwise keep failing until manually redeployed.
